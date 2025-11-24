@@ -21,17 +21,17 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 DB_CONFIG = {
-    "dbname": "balaji_dairy",
-    "user": "postgres",
-    "password": "yogesh2103",
-    "host": "localhost",
-    "port": "5432",
+    "dbname": os.environ.get("DB_NAME", "balaji_dairy"),
+    "user": os.environ.get("DB_USER", "postgres"),
+    "password": os.environ.get("DB_PASSWORD", "yogesh2103"),
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "port": os.environ.get("DB_PORT", "5432"),
 }
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FRESHMILK_SECRET") or "replace-this-with-a-secure-random-string"
 app.config.update(
-    DEBUG=True,
+    DEBUG=os.environ.get("FLASK_DEBUG", "False").lower() == "true",
     UPLOAD_DIR=UPLOAD_DIR,
     MAX_CONTENT_LENGTH=2 * 1024 * 1024,
 )
@@ -268,6 +268,12 @@ def parse_order_items(items_json):
         print(f"[ERROR] Unexpected error parsing items: {e}")
         return [], ''
 
+# ---------- EMBEDDED TEMPLATES ----------
+_templates = {}
+
+# Note: Templates are defined below and loaded at module import time
+# This ensures they work in both local development and Vercel serverless
+
 # ---------- ROUTES ----------
 @app.route('/')
 def index():
@@ -277,8 +283,6 @@ def index():
     products = cur.fetchall()
     cur.close()
     return render_template('index.html', products=products)
-# ---------- EMBEDDED TEMPLATES ----------
-_templates = {}
 
 # ---------- BASE HTML WITH RESPONSIVE NAVBAR ----------
 _templates["base.html"] = r"""
@@ -2370,15 +2374,14 @@ def admin_delete_product(product_id):
     return redirect(url_for('admin_dashboard'))
 
 
-# ---------- MAIN ----------
-if __name__ == '__main__':
-    # Ensure templates loader if you pasted _templates above
-    try:
-        _templates  # noqa: F401
-        app.jinja_loader = DictLoader(_templates)
-    except NameError:
-        pass
+# Load templates at module level (required for Vercel)
+app.jinja_loader = DictLoader(_templates)
 
+# ---------- MAIN (Local Development Only) ----------
+if __name__ == '__main__':
+    # This block only runs for local development (python app.py)
+    # It will NOT run on Vercel serverless
+    
     with app.app_context():
         init_db()
 
@@ -2395,4 +2398,8 @@ if __name__ == '__main__':
             conn.commit()
             print("[OK] Default admin created -> username='admin', password='admin123'")
         cur.close()
+    
+    # Run local development server
+    print("🚀 Starting local development server on http://0.0.0.0:5000")
+    app.run(host='0.0.0.0', port=5000, use_reloader=False)
 
